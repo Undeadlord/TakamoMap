@@ -1,0 +1,2224 @@
+"""
+Detail Panel Components
+Displays detailed information about selected entities with Wyvern Supremacy highlighting
+"""
+import tkinter as tk
+from tkinter import ttk
+from datetime import datetime
+
+class BaseDetailPanel:
+    """Base class for detail panels with common functionality"""
+    
+    def __init__(self, parent, app):
+        self.parent = parent
+        self.app = app
+        self.frame = ttk.Frame(parent)
+        
+        # Header section
+        self.header = ttk.Frame(self.frame)
+        self.header.pack(fill=tk.X, padx=10, pady=5)
+        
+        self.title_var = tk.StringVar()
+        self.title_label = ttk.Label(self.header, textvariable=self.title_var, font=("Arial", 14, "bold"))
+        self.title_label.pack(side=tk.LEFT)
+        
+        self.close_btn = ttk.Button(self.header, text="×", width=3, command=self.on_close)
+        self.close_btn.pack(side=tk.RIGHT)
+        
+        # Create a canvas with scrollbar for the detail content
+        self.content_frame = ttk.Frame(self.frame)
+        self.content_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        
+        self.scrollbar = ttk.Scrollbar(self.content_frame)
+        self.scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        self.canvas = tk.Canvas(self.content_frame, bg="#1e1e2e", highlightthickness=0)
+        self.scrollable_frame = ttk.Frame(self.canvas)
+        
+        self.scrollable_frame.bind(
+            "<Configure>",
+            lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+        )
+        
+        self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        self.canvas.configure(yscrollcommand=self.scrollbar.set)
+        self.scrollbar.configure(command=self.canvas.yview)
+        
+        self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
+        # Add mouse wheel scrolling to the canvas
+        # For Windows/MacOS
+        self.canvas.bind("<MouseWheel>", self.on_mousewheel)
+        # For Linux (X11)
+        self.canvas.bind("<Button-4>", self.on_mousewheel_linux_up)
+        self.canvas.bind("<Button-5>", self.on_mousewheel_linux_down)
+        
+        # Add key bindings for scrolling with arrow keys
+        self.canvas.bind("<Up>", lambda e: self.canvas.yview_scroll(-1, "units"))
+        self.canvas.bind("<Down>", lambda e: self.canvas.yview_scroll(1, "units"))
+        
+        # Make canvas focusable to receive key events
+        self.canvas.config(takefocus=1)
+        
+        # Footer section
+        self.footer = ttk.Frame(self.frame)
+        self.footer.pack(fill=tk.X, side=tk.BOTTOM, padx=10, pady=5)
+        
+        self.date_var = tk.StringVar()
+        self.date_label = ttk.Label(self.footer, textvariable=self.date_var, font=("Arial", 8))
+        self.date_label.pack(side=tk.LEFT)
+    
+    def on_mousewheel(self, event):
+        """Handle mouse wheel for Windows/MacOS"""
+        self.canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+    
+    def on_mousewheel_linux_up(self, event):
+        """Handle mouse wheel up for Linux"""
+        self.canvas.yview_scroll(-1, "units")
+    
+    def on_mousewheel_linux_down(self, event):
+        """Handle mouse wheel down for Linux"""
+        self.canvas.yview_scroll(1, "units")
+    
+    def show(self, entity_id):
+        """Show the detail panel for the specified entity"""
+        # Clear existing content
+        for widget in self.scrollable_frame.winfo_children():
+            widget.destroy()
+        
+        # Hide any other detail panels
+        self.hide_all_panels()
+        
+        # Load and display entity data
+        self.load_entity(entity_id)
+        
+        # Show this panel
+        self.frame.pack(fill=tk.BOTH, expand=True)
+    
+    def hide(self):
+        """Hide this detail panel"""
+        self.frame.pack_forget()
+    
+    def hide_all_panels(self):
+        """Hide all detail panels"""
+        for widget in self.parent.winfo_children():
+            if isinstance(widget, ttk.Frame):
+                widget.pack_forget()
+    
+    def on_close(self):
+        """Handle close button click"""
+        self.hide()
+        self.app.clear_selection()
+    
+    def load_entity(self, entity_id):
+        """Load and display entity data - to be implemented by subclasses"""
+        pass
+    
+    def format_date(self, date_str):
+        """Format a date string"""
+        try:
+            date = datetime.strptime(date_str, "%Y-%m-%dT%H:%M:%S.%fZ")
+            return date.strftime("%Y-%m-%d")
+        except:
+            return date_str
+    
+    def add_field(self, label, value, is_header=False):
+        """Add a labeled field to the detail panel"""
+        if not value:
+            return  # Skip empty values
+        
+        field_frame = ttk.Frame(self.scrollable_frame)
+        field_frame.pack(fill=tk.X, padx=5, pady=2)
+        
+        label_widget = ttk.Label(field_frame, text=f"{label}:", font=("Arial", 10, "bold" if is_header else "normal"))
+        label_widget.pack(side=tk.LEFT, padx=5)
+        
+        value_widget = ttk.Label(field_frame, text=str(value))
+        value_widget.pack(side=tk.LEFT, padx=5)
+    
+    def add_separator(self):
+        """Add a separator line"""
+        separator = ttk.Separator(self.scrollable_frame, orient="horizontal")
+        separator.pack(fill=tk.X, padx=5, pady=10)
+    
+    def add_subtitle(self, text):
+        """Add a subtitle"""
+        subtitle = ttk.Label(self.scrollable_frame, text=text, font=("Arial", 12, "bold"))
+        subtitle.pack(fill=tk.X, padx=5, pady=5)
+    
+    def add_button(self, text, command, location_code=None):
+        """Add a button with optional Wyvern styling for location_code"""
+        # Determine style based on location_code
+        style = "TButton"
+        if location_code and hasattr(self.app, 'is_wyvern_location') and self.app.is_wyvern_location(location_code):
+            style = "Wyvern.TButton"
+            
+        button = ttk.Button(self.scrollable_frame, text=text, command=command, style=style)
+        button.pack(fill=tk.X, padx=5, pady=2)
+
+
+"""
+Enhanced Sector Detail Component
+Displays detailed information about selected sectors with improved context from the Takamo rulebook
+"""
+import tkinter as tk
+from tkinter import ttk
+from datetime import datetime
+
+class EnhancedSectorDetail:
+    """Detail panel for sectors with improved context and explanations"""
+    
+    def __init__(self, parent, app):
+        self.parent = parent
+        self.app = app
+        self.frame = ttk.Frame(parent)
+        
+        # Header section
+        self.header = ttk.Frame(self.frame)
+        self.header.pack(fill=tk.X, padx=10, pady=5)
+        
+        self.title_var = tk.StringVar()
+        self.title_label = ttk.Label(self.header, textvariable=self.title_var, font=("Arial", 14, "bold"))
+        self.title_label.pack(side=tk.LEFT)
+        
+        self.close_btn = ttk.Button(self.header, text="×", width=3, command=self.on_close)
+        self.close_btn.pack(side=tk.RIGHT)
+        
+        # Create a canvas with scrollbar for the detail content
+        self.content_frame = ttk.Frame(self.frame)
+        self.content_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        
+        self.scrollbar = ttk.Scrollbar(self.content_frame)
+        self.scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        self.canvas = tk.Canvas(self.content_frame, bg="#1e1e2e", highlightthickness=0)
+        self.scrollable_frame = ttk.Frame(self.canvas)
+        
+        self.scrollable_frame.bind(
+            "<Configure>",
+            lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+        )
+        
+        self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        self.canvas.configure(yscrollcommand=self.scrollbar.set)
+        self.scrollbar.configure(command=self.canvas.yview)
+        
+        self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
+        # Add mouse wheel scrolling to the canvas
+        # For Windows/MacOS
+        self.canvas.bind("<MouseWheel>", self.on_mousewheel)
+        # For Linux (X11)
+        self.canvas.bind("<Button-4>", self.on_mousewheel_linux_up)
+        self.canvas.bind("<Button-5>", self.on_mousewheel_linux_down)
+        
+        # Add key bindings for scrolling with arrow keys
+        self.canvas.bind("<Up>", lambda e: self.canvas.yview_scroll(-1, "units"))
+        self.canvas.bind("<Down>", lambda e: self.canvas.yview_scroll(1, "units"))
+        
+        # Make canvas focusable to receive key events
+        self.canvas.config(takefocus=1)
+        
+        # Footer section
+        self.footer = ttk.Frame(self.frame)
+        self.footer.pack(fill=tk.X, side=tk.BOTTOM, padx=10, pady=5)
+        
+        self.date_var = tk.StringVar()
+        self.date_label = ttk.Label(self.footer, textvariable=self.date_var, font=("Arial", 8))
+        self.date_label.pack(side=tk.LEFT)
+    
+    def on_mousewheel(self, event):
+        """Handle mouse wheel for Windows/MacOS"""
+        self.canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+    
+    def on_mousewheel_linux_up(self, event):
+        """Handle mouse wheel up for Linux"""
+        self.canvas.yview_scroll(-1, "units")
+    
+    def on_mousewheel_linux_down(self, event):
+        """Handle mouse wheel down for Linux"""
+        self.canvas.yview_scroll(1, "units")
+    
+    def show(self, sector_id):
+        """Show the detail panel for the specified sector"""
+        # Clear existing content
+        for widget in self.scrollable_frame.winfo_children():
+            widget.destroy()
+        
+        # Hide any other detail panels
+        self.hide_all_panels()
+        
+        # Load and display sector data
+        self.load_entity(sector_id)
+        
+        # Show this panel
+        self.frame.pack(fill=tk.BOTH, expand=True)
+    
+    def hide(self):
+        """Hide this detail panel"""
+        self.frame.pack_forget()
+    
+    def hide_all_panels(self):
+        """Hide all detail panels"""
+        for widget in self.parent.winfo_children():
+            if isinstance(widget, ttk.Frame):
+                widget.pack_forget()
+    
+    def on_close(self):
+        """Handle close button click"""
+        self.hide()
+        self.app.clear_selection()
+    
+    def load_entity(self, sector_id):
+        
+        """Load and display sector data with enhanced context"""
+        sector_details = self.app.data_loader.get_sector_details(sector_id)
+        if not sector_details:
+            self.title_var.set("Sector Not Found")
+            return
+        
+        # Set title and date
+        sector_code = sector_details.get('location', 'Unknown Sector')
+        self.title_var.set(f"Sector {sector_code}")
+        self.date_var.set(f"Last updated: {self.format_date(sector_details.get('date', 'Unknown'))}")
+        
+        # Initialize subsectors early - this is the key fix
+        subsectors = sector_details.get('subsectors', [])
+        print(f"Loading sector detail: {sector_code} (ID: {sector_id})")
+        print(f"Initial subsectors count: {len(subsectors)}")
+        
+        # Create a summary section at the top
+        self.add_section_header("Sector Overview")
+        
+        # Basic sector information
+        info_frame = ttk.Frame(self.scrollable_frame)
+        info_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        # Sector code and coordinates
+        code = sector_details.get('location', 'Unknown')
+        
+        # Parse sector code to get X,Y,Z coordinates (if three letters are present)
+        x_coord, y_coord, z_coord = None, None, None
+        if code and len(code) == 3:
+            x_coord = ord(code[0]) - ord('A') + 1
+            y_coord = ord(code[1]) - ord('A') + 1
+            z_coord = ord(code[2]) - ord('A') + 1
+        
+        coord_text = code
+        if x_coord and y_coord and z_coord:
+            coord_text = f"{code} (X:{x_coord}, Y:{y_coord}, Z:{z_coord})"
+        
+        code_tooltip = "A sector's three-letter code defines its position in the galaxy. Each letter represents a coordinate along the X, Y, and Z axes."
+        code_label = self.create_info_item(info_frame, 0, 0, "Sector Code:", coord_text, tooltip=code_tooltip, span=2)
+        
+        # Calculate distance from galactic center (MMM)
+        center_distance = None
+        if x_coord and y_coord and z_coord:
+            center_coord = 13  # 'M' is the 13th letter, representing the center
+            dx = x_coord - center_coord
+            dy = y_coord - center_coord
+            dz = z_coord - center_coord
+            center_distance = round((dx**2 + dy**2 + dz**2)**0.5, 2)
+            
+            distance_tooltip = "The distance from the galactic center (sector MMM) in sector units."
+            distance_label = self.create_info_item(info_frame, 1, 0, "Distance from Center:", 
+                                                  f"{center_distance} sectors", 
+                                                  tooltip=distance_tooltip, span=2)
+        
+        # Add information about sector size
+        size_info = "Each sector is a cube 600 parsecs wide and contains 27 subsectors arranged in a 3×3×3 grid."
+        size_label = self.create_info_item(info_frame, 2, 0, "Sector Size:", "600 parsecs", tooltip=size_info, span=2)
+        
+        # Navigation info
+        move_tooltip = "Traveling a full sector costs 1 movement point. Your safe movement range depends on your empire's Tech Level."
+        move_label = self.create_info_item(info_frame, 3, 0, "Movement Cost:", "1 sector movement point", 
+                                           tooltip=move_tooltip, span=2)
+        
+        # Add separator
+        self.add_separator()
+        
+        # Subsector grid visualization
+        self.add_section_header("Subsector Grid")
+
+        # Add debug code:
+        print(f"Sector: {sector_code}, Subsectors found: {len(subsectors)}")
+        for sub in subsectors:
+            print(f"Subsector data: {sub}")
+
+        # Create a simple grid with one clickable cell for each actual subsector
+        grid_frame = ttk.Frame(self.scrollable_frame)
+        grid_frame.pack(fill=tk.X, padx=5, pady=5)
+
+        # If there are subsectors, create buttons for them
+        if subsectors:
+            for subsector in subsectors:
+                subsector_loc = subsector.get('location', '')
+                subsector_id = subsector.get('id')
+                
+                # Create a button that represents this subsector
+                button_text = f"Subsector {subsector_loc}"
+                is_wyvern = self.app.is_wyvern_location(subsector_loc) if hasattr(self.app, 'is_wyvern_location') else False
+                
+                subsector_button = ttk.Button(
+                    grid_frame,
+                    text=button_text,
+                    style="Wyvern.TButton" if is_wyvern else "TButton",
+                    command=lambda sid=subsector_id: self.app.select_subsector(sid)
+                )
+                subsector_button.pack(padx=10, pady=5, fill=tk.X)
+                print(f"Created button for subsector: {subsector_loc} (ID: {subsector_id})")
+        else:
+            # No subsectors found
+            no_subsectors = ttk.Label(grid_frame, text="No subsectors found for this sector.", foreground="#aaaaaa")
+            no_subsectors.pack(padx=10, pady=10)
+
+        # Add an explanation
+        grid_info = ttk.Label(grid_frame, text="Click on a subsector to view its details.", 
+                            wraplength=550, justify="left")
+        grid_info.pack(fill=tk.X, padx=5, pady=5)
+        
+        # Enhanced grid viz: Create a 3x3 grid to show subsectors
+        # Define the grid dimensions
+        grid_size = 50  # Size of each grid cell
+        grid_spacing = 10  # Spacing between cells
+        grid_rows = 3
+        grid_cols = 3
+        grid_depth = 3 # Z-axis (showing as layers)
+        
+        # Get possible subsector coordinates
+        subsector_coords = {}  # Dictionary to map subsector coordinates to their data
+        sector_code = sector_details.get('location', '')
+        
+        # If no subsectors found in sector_details, try direct lookup
+        if not subsectors or len(subsectors) == 0:
+            print("No subsectors found in sector_details, trying direct query")
+            try:
+                # Get the sector code
+                if sector_code:
+                    print(f"Looking for subsectors with location starting with {sector_code}")
+                    # Look for any subsectors that have a location starting with the sector code
+                    subsectors = [s for s in self.app.data_loader.subsectors 
+                                 if s.get('location', '').startswith(sector_code)]
+                    print(f"Found {len(subsectors)} subsectors by location code")
+            except Exception as e:
+                print(f"Error finding subsectors by location: {e}")
+                
+            # If still no subsectors, try by sector_id
+            if not subsectors or len(subsectors) == 0:
+                try:
+                    direct_subsectors = self.app.data_loader.get_subsectors_for_sector(sector_id)
+                    if direct_subsectors:
+                        print(f"Found {len(direct_subsectors)} subsectors by sector_id")
+                        subsectors = direct_subsectors
+                except Exception as e:
+                    print(f"Error finding subsectors by sector_id: {e}")
+        
+        # Force generate example subsectors for testing if none found
+        if not subsectors or len(subsectors) == 0:
+            print("No subsectors found, creating example for testing")
+            if sector_code and len(sector_code) == 3:
+                # Create example subsector
+                example_subsector = {
+                    'id': f"example_{sector_code}111",
+                    'location': f"{sector_code}111",
+                    'sector_id': sector_id
+                }
+                subsectors = [example_subsector]
+                print(f"Created example subsector: {example_subsector['location']}")
+        
+        # Add any known subsectors to the mapping
+        for subsector in subsectors:
+            subsector_loc = subsector.get('location', '')
+            if len(subsector_loc) >= 6 and subsector_loc.startswith(sector_code):
+                # Extract coordinates from location code
+                try:
+                    # Fix for GFN233 style parsing - extract digits as coordinates
+                    subsector_coords = subsector_loc[3:6]
+                    x = int(subsector_coords[0]) - 1  # Convert to 0-indexed
+                    y = int(subsector_coords[1]) - 1
+                    z = int(subsector_coords[2]) - 1
+                    
+                    # Ensure coordinates are valid (0-2 range)
+                    if 0 <= x < 3 and 0 <= y < 3 and 0 <= z < 3:
+                        coord_key = f"{x},{y},{z}"
+                        subsector_coords[coord_key] = subsector
+                        print(f"Added subsector at {coord_key}: {subsector_loc} (ID: {subsector.get('id')})")
+                except Exception as e:
+                    print(f"Could not parse coordinates from {subsector_loc}: {e}")
+                    # Try alternate parsing for legacy format
+                    try:
+                        # Add special handling for subsector 233
+                        if subsector_loc.endswith('233'):
+                            x, y, z = 1, 2, 2  # Maps to (2,3,3) in 0-indexed form
+                            coord_key = f"{x},{y},{z}"
+                            subsector_coords[coord_key] = subsector
+                            print(f"Added subsector 233 at coordinates {coord_key}")
+                    except Exception as e2:
+                        print(f"Failed alternate parsing for {subsector_loc}: {e2}")
+        
+        # Create tabs for each layer in Z-axis
+        tab_frame = ttk.Frame(grid_frame)
+        tab_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        tab_label = ttk.Label(tab_frame, text="Z-Axis Layers:")
+        tab_label.pack(side=tk.LEFT, padx=5)
+        
+        # Create a frame to hold the grid
+        grid_canvas_frame = ttk.Frame(grid_frame)
+        grid_canvas_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        # Create canvas for the grid
+        grid_canvas = tk.Canvas(
+            grid_canvas_frame, 
+            width=(grid_cols * (grid_size + grid_spacing)), 
+            height=(grid_rows * (grid_size + grid_spacing)),
+            bg="#1e1e2e", 
+            highlightthickness=0
+        )
+        grid_canvas.pack(fill=tk.X, padx=5, pady=5)
+        
+        # Function to draw a specific Z-layer
+        def draw_z_layer(z_layer):
+            # Clear the canvas
+            grid_canvas.delete("all")
+            
+            # Draw grid lines
+            for row in range(grid_rows + 1):
+                y_pos = row * (grid_size + grid_spacing)
+                grid_canvas.create_line(
+                    0, y_pos, 
+                    grid_cols * (grid_size + grid_spacing), y_pos,
+                    fill="#444444"
+                )
+            
+            for col in range(grid_cols + 1):
+                x_pos = col * (grid_size + grid_spacing)
+                grid_canvas.create_line(
+                    x_pos, 0, 
+                    x_pos, grid_rows * (grid_size + grid_spacing),
+                    fill="#444444"
+                )
+            
+            # Draw subsectors
+            for y in range(grid_rows):
+                for x in range(grid_cols):
+                    # Calculate position for this cell
+                    x_pos = x * (grid_size + grid_spacing)
+                    y_pos = y * (grid_size + grid_spacing)
+                    
+                    # Check if there's a subsector at this position
+                    coord_key = f"{x},{y},{z_layer}"
+                    if coord_key in subsector_coords:
+                        subsector = subsector_coords[coord_key]
+                        subsector_loc = subsector.get('location', '')
+                        subsector_id = subsector.get('id')
+                        
+                        # Check if the subsector belongs to Wyvern Supremacy
+                        is_wyvern = False
+                        if hasattr(self.app, 'is_wyvern_location'):
+                            is_wyvern = self.app.is_wyvern_location(subsector_loc)
+                        
+                        # Set color based on Wyvern status
+                        fill_color = "#4caf50" if is_wyvern else "#2196f3"
+                        
+                        # Create the subsector rectangle
+                        rect_id = grid_canvas.create_rectangle(
+                            x_pos + 5, y_pos + 5, 
+                            x_pos + grid_size - 5, y_pos + grid_size - 5,
+                            fill=fill_color, 
+                            outline="white", 
+                            width=2
+                        )
+                        
+                        # Add the subsector label
+                        label_id = grid_canvas.create_text(
+                            x_pos + grid_size // 2, 
+                            y_pos + grid_size // 2,
+                            text=subsector_loc[3:6],  # Show just the coordinates part
+                            fill="white", 
+                            font=("Arial", 8, "bold")
+                        )
+                        
+                        # Make the rectangle clickable - pass the subsector_id to the selection function
+                        if subsector_id:
+                            # Create a closure to capture the subsector_id value
+                            def create_click_handler(sid):
+                                # Return a function that uses the captured value
+                                return lambda event: (print(f"Clicked subsector ID: {sid}"), self.app.select_subsector(sid))
+                            
+                            # Bind both rectangle and label to the click handler
+                            handler = create_click_handler(subsector_id)
+                            grid_canvas.tag_bind(rect_id, "<Button-1>", handler)
+                            grid_canvas.tag_bind(label_id, "<Button-1>", handler)
+                            print(f"Added click handler for subsector {subsector_loc} with ID {subsector_id}")
+                    else:
+                        # Draw empty cell
+                        grid_canvas.create_rectangle(
+                            x_pos + 5, y_pos + 5, 
+                            x_pos + grid_size - 5, y_pos + grid_size - 5,
+                            fill="#333333", 
+                            outline="#444444", 
+                            width=1
+                        )
+                        
+                        # Add coordinates text to empty cells
+                        coords_text = f"{x+1}{y+1}{z_layer+1}"
+                        grid_canvas.create_text(
+                            x_pos + grid_size // 2, 
+                            y_pos + grid_size // 2,
+                            text=coords_text,
+                            fill="#666666", 
+                            font=("Arial", 8)
+                        )
+        
+        # Create buttons for each Z layer
+        current_z = 1  # Default to middle layer
+        z_buttons = []
+        
+        for z in range(grid_depth):
+            btn = ttk.Button(
+                tab_frame, 
+                text=f"Layer {z+1}",
+                width=8,
+                command=lambda z_val=z: (draw_z_layer(z_val), update_z_buttons(z_val))
+            )
+            btn.pack(side=tk.LEFT, padx=2)
+            z_buttons.append(btn)
+        
+        # Function to update button styles
+        def update_z_buttons(active_z):
+            nonlocal current_z
+            current_z = active_z
+            for i, btn in enumerate(z_buttons):
+                if i == active_z:
+                    btn.configure(style="Selected.TButton")
+                else:
+                    btn.configure(style="TButton")
+        
+        # Initialize with the middle layer (Z=1)
+        draw_z_layer(1)
+        update_z_buttons(1)
+        
+        # Grid explanation
+        grid_info = ttk.Label(grid_frame, text="Subsectors are arranged in a 3×3×3 grid. Each subsector can contain up to 5 star systems.", 
+                              wraplength=550, justify="left")
+        grid_info.pack(fill=tk.X, padx=5, pady=5)
+        
+        # If we have no subsectors, add a label explaining how to view them
+        if not subsector_coords:
+            empty_label = ttk.Label(
+                grid_frame, 
+                text="No subsectors found in this sector. The grid shows possible subsector positions.",
+                wraplength=550, 
+                foreground="#aaaaaa"
+            )
+            empty_label.pack(fill=tk.X, padx=5, pady=5)
+        
+        # Add separator
+        self.add_separator()
+        
+        # Subsector listing
+        self.add_section_header("Explored Subsectors")
+        
+        # We've already handled finding subsectors above, so now we just need to display them
+        if subsectors:
+            print(f"Rendering {len(subsectors)} subsectors in listing")
+            subsector_list_frame = ttk.Frame(self.scrollable_frame)
+            subsector_list_frame.pack(fill=tk.X, padx=5, pady=5)
+            
+            # Create a scrollable list of subsectors
+            for i, subsector in enumerate(subsectors):
+                try:
+                    subsector_item = ttk.Frame(subsector_list_frame)
+                    subsector_item.pack(fill=tk.X, padx=5, pady=2)
+                    
+                    subsector_loc = subsector.get('location', '')
+                    subsector_id = subsector.get('id')
+                    
+                    # If subsector has stars property, get the count, otherwise just show 0
+                    star_count = len(subsector.get('stars', []))
+                    
+                    # Parse the subsector coordinates (if 3 digits are present after the sector code)
+                    if subsector_loc and len(subsector_loc) >= 6:
+                        sector_code = subsector_loc[:3]
+                        subsector_coords = subsector_loc[3:6]
+                        
+                        # Try to parse coordinates
+                        try:
+                            x = int(subsector_coords[0])
+                            y = int(subsector_coords[1])
+                            z = int(subsector_coords[2])
+                            coord_text = f"{subsector_loc} (X:{x}, Y:{y}, Z:{z})"
+                        except:
+                            coord_text = subsector_loc
+                    else:
+                        coord_text = subsector_loc
+                    
+                    # Create a button that navigates to the subsector when clicked
+                    print(f"Creating button for subsector: {subsector_loc} (ID: {subsector_id})")
+                    nav_button = ttk.Button(
+                        subsector_item, 
+                        text=f"{coord_text} - {star_count} star{'s' if star_count != 1 else ''}",
+                        command=lambda s=subsector_id: self.app.select_subsector(s)
+                    )
+                    nav_button.pack(fill=tk.X, padx=5, pady=2)
+                except Exception as e:
+                    print(f"Error creating subsector item {i}: {e}")
+        else:
+            # No subsector data found for this sector
+            no_data = ttk.Label(self.scrollable_frame, text="No subsector data available for this sector.")
+            no_data.pack(fill=tk.X, padx=10, pady=10)
+    
+    def create_info_item(self, parent, row, col, label_text, value_text, tooltip="", span=1, is_highlight=False):
+        """Create a labeled field with tooltip in a grid layout"""
+        # Create a frame for the field
+        field_frame = ttk.Frame(parent)
+        field_frame.grid(row=row, column=col, padx=5, pady=2, sticky="w", columnspan=span)
+        
+        # Create the label
+        label_widget = ttk.Label(field_frame, text=f"{label_text}", font=("Arial", 10, "bold"))
+        label_widget.pack(side=tk.LEFT, padx=2)
+        
+        # Create the value
+        style = "Bold.TLabel" if is_highlight else "TLabel"
+        value_widget = ttk.Label(field_frame, text=str(value_text), style=style)
+        value_widget.pack(side=tk.LEFT, padx=2)
+        
+        # Add tooltip if provided
+        if tooltip:
+            self.add_tooltip(field_frame, tooltip)
+        
+        return field_frame
+    
+    def add_tooltip(self, widget, text):
+        """Add a tooltip to a widget (shows on hover)"""
+        # This is a simplified tooltip implementation
+        # For a production app, you might want a more sophisticated tooltip
+        def enter(event):
+            x, y, _, _ = widget.bbox("insert")
+            x += widget.winfo_rootx() + 25
+            y += widget.winfo_rooty() + 25
+            
+            # Create a toplevel window
+            self.tooltip = tk.Toplevel(widget)
+            self.tooltip.wm_overrideredirect(True)
+            self.tooltip.wm_geometry(f"+{x}+{y}")
+            
+            label = ttk.Label(self.tooltip, text=text, justify='left',
+                            background="#2a2a3a", foreground="white", 
+                            relief='solid', borderwidth=1,
+                            wraplength=300)
+            label.pack(ipadx=2, ipady=2)
+            
+        def leave(event):
+            if hasattr(self, 'tooltip'):
+                self.tooltip.destroy()
+        
+        widget.bind("<Enter>", enter)
+        widget.bind("<Leave>", leave)
+    
+    def add_section_header(self, text):
+        """Add a section header to the panel"""
+        header = ttk.Label(self.scrollable_frame, text=text, font=("Arial", 12, "bold"))
+        header.pack(fill=tk.X, padx=5, pady=5)
+    
+    def add_separator(self):
+        """Add a separator line"""
+        separator = ttk.Separator(self.scrollable_frame, orient="horizontal")
+        separator.pack(fill=tk.X, padx=5, pady=10)
+    
+    def format_date(self, date_str):
+        """Format a date string"""
+        if not date_str or date_str == 'Unknown':
+            return 'Unknown'
+            
+        try:
+            date = datetime.strptime(date_str, "%Y-%m-%dT%H:%M:%S.%fZ")
+            return date.strftime("%Y-%m-%d")
+        except:
+            try:
+                # Try alternate format
+                date = datetime.strptime(date_str, "%Y-%m-%d")
+                return date.strftime("%Y-%m-%d")
+            except:
+                return date_str
+
+"""
+Enhanced Subsector Detail Component
+Displays detailed information about selected subsectors with improved context from the Takamo rulebook
+"""
+import tkinter as tk
+from tkinter import ttk
+from datetime import datetime
+
+class EnhancedSubsectorDetail:
+    """Detail panel for subsectors with improved context and explanations"""
+    
+    def __init__(self, parent, app):
+        self.parent = parent
+        self.app = app
+        self.frame = ttk.Frame(parent)
+        
+        # Header section
+        self.header = ttk.Frame(self.frame)
+        self.header.pack(fill=tk.X, padx=10, pady=5)
+        
+        self.title_var = tk.StringVar()
+        self.title_label = ttk.Label(self.header, textvariable=self.title_var, font=("Arial", 14, "bold"))
+        self.title_label.pack(side=tk.LEFT)
+        
+        self.close_btn = ttk.Button(self.header, text="×", width=3, command=self.on_close)
+        self.close_btn.pack(side=tk.RIGHT)
+        
+        # Create a canvas with scrollbar for the detail content
+        self.content_frame = ttk.Frame(self.frame)
+        self.content_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        
+        self.scrollbar = ttk.Scrollbar(self.content_frame)
+        self.scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        self.canvas = tk.Canvas(self.content_frame, bg="#1e1e2e", highlightthickness=0)
+        self.scrollable_frame = ttk.Frame(self.canvas)
+        
+        self.scrollable_frame.bind(
+            "<Configure>",
+            lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+        )
+        
+        self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        self.canvas.configure(yscrollcommand=self.scrollbar.set)
+        self.scrollbar.configure(command=self.canvas.yview)
+        
+        self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
+        # Add mouse wheel scrolling to the canvas
+        # For Windows/MacOS
+        self.canvas.bind("<MouseWheel>", self.on_mousewheel)
+        # For Linux (X11)
+        self.canvas.bind("<Button-4>", self.on_mousewheel_linux_up)
+        self.canvas.bind("<Button-5>", self.on_mousewheel_linux_down)
+        
+        # Add key bindings for scrolling with arrow keys
+        self.canvas.bind("<Up>", lambda e: self.canvas.yview_scroll(-1, "units"))
+        self.canvas.bind("<Down>", lambda e: self.canvas.yview_scroll(1, "units"))
+        
+        # Make canvas focusable to receive key events
+        self.canvas.config(takefocus=1)
+        
+        # Footer section
+        self.footer = ttk.Frame(self.frame)
+        self.footer.pack(fill=tk.X, side=tk.BOTTOM, padx=10, pady=5)
+        
+        self.date_var = tk.StringVar()
+        self.date_label = ttk.Label(self.footer, textvariable=self.date_var, font=("Arial", 8))
+        self.date_label.pack(side=tk.LEFT)
+    
+    def on_mousewheel(self, event):
+        """Handle mouse wheel for Windows/MacOS"""
+        self.canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+    
+    def on_mousewheel_linux_up(self, event):
+        """Handle mouse wheel up for Linux"""
+        self.canvas.yview_scroll(-1, "units")
+    
+    def on_mousewheel_linux_down(self, event):
+        """Handle mouse wheel down for Linux"""
+        self.canvas.yview_scroll(1, "units")
+    
+    def show(self, subsector_id):
+        """Show the detail panel for the specified subsector"""
+        # Clear existing content
+        for widget in self.scrollable_frame.winfo_children():
+            widget.destroy()
+        
+        # Hide any other detail panels
+        self.hide_all_panels()
+        
+        # Load and display subsector data
+        self.load_entity(subsector_id)
+        
+        # Show this panel
+        self.frame.pack(fill=tk.BOTH, expand=True)
+    
+    def hide(self):
+        """Hide this detail panel"""
+        self.frame.pack_forget()
+    
+    def hide_all_panels(self):
+        """Hide all detail panels"""
+        for widget in self.parent.winfo_children():
+            if isinstance(widget, ttk.Frame):
+                widget.pack_forget()
+    
+    def on_close(self):
+        """Handle close button click"""
+        self.hide()
+        self.app.clear_selection()
+    
+    def load_entity(self, subsector_id):
+        """Load and display subsector data with enhanced context"""
+        subsector_details = self.app.data_loader.get_subsector_details(subsector_id)
+        if not subsector_details:
+            self.title_var.set("Subsector Not Found")
+            return
+        
+        # Set title and date
+        subsector_code = subsector_details.get('location', 'Unknown Subsector')
+        self.title_var.set(f"Subsector {subsector_code}")
+        self.date_var.set(f"Last updated: {self.format_date(subsector_details.get('date', 'Unknown'))}")
+        
+        # Create a summary section at the top
+        self.add_section_header("Subsector Overview")
+        
+        # Basic subsector information
+        info_frame = ttk.Frame(self.scrollable_frame)
+        info_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        # Subsector code and coordinates
+        code = subsector_details.get('location', 'Unknown')
+        
+        # Parse subsector code 
+        # Format should be AAA111 - where AAA is sector code and 111 is subsector code
+        sector_code = ""
+        x_coord, y_coord, z_coord = None, None, None
+        
+        if code and len(code) >= 6:
+            sector_code = code[:3]
+            subsector_coords = code[3:6]
+            
+            if len(subsector_coords) == 3 and subsector_coords.isdigit():
+                x_coord = int(subsector_coords[0])
+                y_coord = int(subsector_coords[1])
+                z_coord = int(subsector_coords[2])
+        
+        coord_text = code
+        if x_coord and y_coord and z_coord:
+            coord_text = f"{code} (X:{x_coord}, Y:{y_coord}, Z:{z_coord})"
+        
+        code_tooltip = "A subsector's code consists of the three-letter sector code followed by three numbers representing the X, Y, Z coordinates within the sector (each from 1-3)."
+        code_label = self.create_info_item(info_frame, 0, 0, "Subsector Code:", coord_text, tooltip=code_tooltip, span=2)
+        
+        # Add information about parent sector
+        parent_sector = f"{sector_code}" if sector_code else "Unknown"
+        sector_link = ttk.Button(
+            info_frame, 
+            text=f"Parent Sector: {parent_sector}",
+            command=lambda: self.app.select_entity('sector', self.app.data_loader.get_sector_id_by_code(sector_code))
+        )
+        sector_link.grid(row=1, column=0, padx=5, pady=2, sticky="w", columnspan=2)
+        
+        # Add information about subsector size
+        size_info = "Each subsector is a cube 200 parsecs across and may contain up to 5 star systems."
+        size_label = self.create_info_item(info_frame, 2, 0, "Subsector Size:", "200 parsecs", tooltip=size_info, span=2)
+        
+        # Determine subsector position within sector
+        if x_coord and y_coord and z_coord:
+            position_text = ""
+            if x_coord == 2 and y_coord == 2 and z_coord == 2:
+                position_text = "Center of sector"
+            elif x_coord == 1 and y_coord == 1 and z_coord == 1:
+                position_text = "Front top left corner of sector"
+            elif x_coord == 3 and y_coord == 3 and z_coord == 3:
+                position_text = "Rear bottom right corner of sector"
+            else:
+                # Determine position based on coordinates
+                x_pos = "center" if x_coord == 2 else ("front" if x_coord == 1 else "rear")
+                y_pos = "center" if y_coord == 2 else ("top" if y_coord == 1 else "bottom")
+                z_pos = "center" if z_coord == 2 else ("left" if z_coord == 1 else "right")
+                position_text = f"{x_pos} {y_pos} {z_pos} of sector"
+            
+            position_tooltip = "The relative position of this subsector within its parent sector."
+            position_label = self.create_info_item(info_frame, 3, 0, "Position:", position_text, tooltip=position_tooltip, span=2)
+        
+        # Star count
+        stars = subsector_details.get('stars', [])
+        star_count = len(stars)
+        
+        star_info = "A subsector can contain up to 5 star systems. The stars are always in sequential order from 1 to 5."
+        star_label = self.create_info_item(info_frame, 4, 0, "Star Systems:", f"{star_count}/5", tooltip=star_info, span=2)
+        
+        # Hazard information
+        hazard_type = None
+        if "cloud" in subsector_details.get('extras', '').lower():
+            hazard_type = "Stellar Cloud"
+        elif "rift" in subsector_details.get('extras', '').lower():
+            hazard_type = "Hyperspace Rift"
+        elif "cluster" in subsector_details.get('extras', '').lower():
+            hazard_type = "Star Cluster"
+        elif "nova" in subsector_details.get('extras', '').lower():
+            hazard_type = "Supernova"
+        
+        if hazard_type:
+            hazard_tooltip = {
+                "Stellar Cloud": "May contain stars, but requires system-by-system scanning.",
+                "Hyperspace Rift": "DANGER! Will destroy any fleet that enters.",
+                "Star Cluster": "DANGER! Will destroy any fleet that enters.",
+                "Supernova": "DANGER! Will destroy any fleet that enters."
+            }.get(hazard_type, "")
+            
+            hazard_label = self.create_info_item(info_frame, 5, 0, "Hazard:", hazard_type, 
+                                                tooltip=hazard_tooltip, span=2, 
+                                                is_highlight=hazard_type != "Stellar Cloud")
+        
+        # Add separator
+        self.add_separator()
+        
+        # Star systems visualization
+        self.add_section_header("Star Systems")
+        
+        # Star system explanation
+        sys_info = ttk.Label(self.scrollable_frame, 
+                            text="A subsector can contain up to 5 star systems. Each star system is numbered from 1 to 5, and may contain up to 9 planets.",
+                            wraplength=550, justify="left")
+        sys_info.pack(fill=tk.X, padx=10, pady=5)
+        
+        # Create a frame for the star systems
+        stars_frame = ttk.Frame(self.scrollable_frame)
+        stars_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        if stars:
+            # Create a table-like structure
+            headers = ["System", "Star Type", "Planets", "Details"]
+            
+            # Create header
+            header_frame = ttk.Frame(stars_frame)
+            header_frame.pack(fill=tk.X, padx=5, pady=2)
+            
+            for i, header in enumerate(headers):
+                header_label = ttk.Label(header_frame, text=header, font=("Arial", 10, "bold"))
+                header_label.grid(row=0, column=i, padx=5, pady=2, sticky="w")
+            
+            ttk.Separator(stars_frame, orient="horizontal").pack(fill=tk.X, padx=5, pady=5)
+            
+            # Create rows for each star
+            for i, star in enumerate(stars):
+                star_frame = ttk.Frame(stars_frame)
+                star_frame.pack(fill=tk.X, padx=5, pady=2)
+                
+                # System
+                system_code = star.get('location', '')
+                system_num = system_code[-1] if system_code and len(system_code) > 0 else '?'
+                system_button = ttk.Button(
+                    star_frame,
+                    text=system_code,
+                    command=lambda s=star.get('id'): self.app.select_system(s)
+                )
+                system_button.grid(row=0, column=0, padx=5, pady=2, sticky="w")
+                
+                # Star Type 
+                star_type = star.get('type', 'Unknown')
+                star_class = self.get_star_class_info(star_type)
+                type_label = ttk.Label(star_frame, text=star_type)
+                type_label.grid(row=0, column=1, padx=5, pady=2, sticky="w")
+                
+                # Add tooltip to star type
+                if star_class:
+                    self.add_tooltip(type_label, star_class)
+                
+                # Planet Count
+                planets = star.get('planets', [])
+                planet_count = len(planets)
+                planet_label = ttk.Label(star_frame, text=str(planet_count))
+                planet_label.grid(row=0, column=2, padx=5, pady=2, sticky="w")
+                
+                # Details (navigation hazard, etc)
+                details = []
+                
+                # Check if star is a navigation hazard
+                is_hazard = self.is_navigation_hazard(star_type)
+                if is_hazard:
+                    details.append("HAZARD: Will destroy approaching fleets!")
+                
+                # Add any other details here
+                if star.get('extras'):
+                    details.append(star.get('extras'))
+                
+                details_text = "; ".join(details) if details else "Safe for navigation"
+                details_label = ttk.Label(
+                    star_frame, 
+                    text=details_text,
+                    foreground="red" if is_hazard else "white"
+                )
+                details_label.grid(row=0, column=3, padx=5, pady=2, sticky="w")
+        else:
+            no_stars = ttk.Label(stars_frame, text="No star systems found in this subsector.")
+            no_stars.pack(fill=tk.X, padx=10, pady=10)
+        
+        # Add separator
+        self.add_separator()
+        
+        # Add navigation section at the bottom
+        self.add_section_header("Navigation")
+        
+        # Create buttons to navigate to parent sector and nearby subsectors
+        nav_frame = ttk.Frame(self.scrollable_frame)
+        nav_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        # Parent sector button
+        sector_button = ttk.Button(
+            nav_frame,
+            text=f"Back to Sector {sector_code}",
+            command=lambda: self.app.select_entity('sector', self.app.data_loader.get_sector_id_by_code(sector_code))
+        )
+        sector_button.pack(fill=tk.X, padx=5, pady=2)
+        
+        # If we have coordinates, create buttons for adjacent subsectors
+        if x_coord and y_coord and z_coord:
+            # Check if we're at the edges of the sector
+            can_go_down = y_coord < 3
+            can_go_up = y_coord > 1
+            can_go_right = z_coord < 3
+            can_go_left = z_coord > 1
+            can_go_back = x_coord < 3
+            can_go_forward = x_coord > 1
+            
+            # Create a frame for directional buttons
+            dir_frame = ttk.Frame(nav_frame)
+            dir_frame.pack(fill=tk.X, padx=5, pady=10)
+            
+            dir_label = ttk.Label(dir_frame, text="Adjacent Subsectors:")
+            dir_label.grid(row=0, column=0, columnspan=3, padx=5, pady=2, sticky="w")
+            
+            # Helper function to create adjacent subsector code
+            def get_adjacent_code(dx, dy, dz):
+                new_x = x_coord + dx
+                new_y = y_coord + dy
+                new_z = z_coord + dz
+                
+                # Check boundaries
+                if 1 <= new_x <= 3 and 1 <= new_y <= 3 and 1 <= new_z <= 3:
+                    return f"{sector_code}{new_x}{new_y}{new_z}"
+                return None
+            
+            # Buttons for adjacent subsectors
+            directions = [
+                ("↖", -1, -1, -1, 1, 1), # Top-left-forward
+                ("↑", 0, -1, 0, 1, 2),   # Top-center
+                ("↗", 1, -1, 1, 1, 3),   # Top-right-back
+                ("←", 0, 0, -1, 2, 1),   # Middle-left
+                ("•", 0, 0, 0, 2, 2),    # Current position
+                ("→", 0, 0, 1, 2, 3),    # Middle-right
+                ("↙", -1, 1, -1, 3, 1),  # Bottom-left-forward
+                ("↓", 0, 1, 0, 3, 2),    # Bottom-center
+                ("↘", 1, 1, 1, 3, 3)     # Bottom-right-back
+            ]
+            
+            # Add up/down dimension buttons
+            up_frame = ttk.Frame(dir_frame)
+            up_frame.grid(row=1, column=0, columnspan=3, padx=5, pady=5, sticky="w")
+            
+            if can_go_forward:
+                forward_code = get_adjacent_code(-1, 0, 0)
+                forward_btn = ttk.Button(
+                    up_frame,
+                    text=f"↑ Forward ({forward_code})",
+                    command=lambda c=forward_code: self.app.select_entity(
+                        'subsector', 
+                        self.app.data_loader.get_subsector_id_by_code(c)
+                    )
+                )
+                forward_btn.pack(fill=tk.X, padx=5, pady=2)
+            
+            if can_go_back:
+                back_code = get_adjacent_code(1, 0, 0)
+                back_btn = ttk.Button(
+                    up_frame,
+                    text=f"↓ Back ({back_code})",
+                    command=lambda c=back_code: self.app.select_entity(
+                        'subsector', 
+                        self.app.data_loader.get_subsector_id_by_code(c)
+                    )
+                )
+                back_btn.pack(fill=tk.X, padx=5, pady=2)
+            
+            # Create a 3x3 grid for directional navigation (top view)
+            grid_frame = ttk.Frame(dir_frame)
+            grid_frame.grid(row=2, column=0, columnspan=3, padx=5, pady=5, sticky="w")
+            
+            grid_label = ttk.Label(grid_frame, text="Top View (Z-Y plane):")
+            grid_label.grid(row=0, column=0, columnspan=3, padx=5, pady=2, sticky="w")
+            
+            for i, (symbol, dx, dy, dz, grid_y, grid_z) in enumerate(directions):
+                if dx == 0 and dy == 0 and dz == 0:
+                    # Current position
+                    btn = ttk.Label(grid_frame, text=symbol, width=3)
+                    btn.grid(row=grid_y, column=grid_z, padx=2, pady=2)
+                else:
+                    adj_code = get_adjacent_code(dx, dy, dz)
+                    if adj_code:
+                        btn = ttk.Button(
+                            grid_frame,
+                            text=symbol,
+                            width=3,
+                            command=lambda c=adj_code: self.app.select_entity(
+                                'subsector', 
+                                self.app.data_loader.get_subsector_id_by_code(c)
+                            )
+                        )
+                        btn.grid(row=grid_y, column=grid_z, padx=2, pady=2)
+                    else:
+                        # Out of bounds
+                        btn = ttk.Label(grid_frame, text="", width=3)
+                        btn.grid(row=grid_y, column=grid_z, padx=2, pady=2)
+    
+    def get_star_class_info(self, star_type):
+        """Return information about a star type/class"""
+        star_info = {
+            "Blue - Type W": "One of the hottest and most massive star types.",
+            "Blue - Type O": "Very hot, massive, and luminous star.",
+            "Blue - Type B": "Hot, blue star, typically found in young clusters.",
+            "Blue/White - Type A": "White or blue-white stars.",
+            "White - Type F": "White stars slightly hotter than our Sun.",
+            "Yellow - Type G": "Yellow stars similar to our Sun.",
+            "Orange/Red - Type K": "Orange to red stars, cooler than our Sun.",
+            "Red - Type M": "Red dwarf stars, the most common type.",
+            "Red - Type C": "Carbon-rich red giant stars.",
+            "Red - Type S": "Cool giant stars with unusual spectra.",
+            "Bright Supergiant": "Extremely luminous evolved massive star.",
+            "Faint Supergiant": "A less luminous supergiant star.",
+            "Bright Giant": "Very luminous giant star.",
+            "Normal Giant": "Standard giant star, an evolved star with expanded outer layers.",
+            "Subgiant": "Star intermediate between a main sequence star and a giant star.",
+            "Main Sequence": "A 'normal' star like our Sun, fusing hydrogen in its core.",
+            "Subdwarf": "Stars with luminosity 1.5 to 2 magnitudes lower than main sequence stars.",
+            "Binary": "A system of two stars orbiting around their common center of mass.",
+            "Multiple": "A system of three or more stars orbiting around their common center of mass.",
+            "White Dwarf Secondary": "A system containing a white dwarf, the dense remnant of a dead star.",
+            "Blackhole Secondary": "A system containing a black hole, extremely hazardous to navigation."
+        }
+        
+        for key, info in star_info.items():
+            if key in star_type:
+                return info
+        
+        return None
+    
+    def is_navigation_hazard(self, star_type):
+        """Check if a star type is a navigation hazard"""
+        hazardous_types = [
+            "Blackhole",
+            "Neutron Star",
+            "Nova",
+            "White Dwarf",
+            "Black Dwarf"
+        ]
+        
+        return any(hazard in star_type for hazard in hazardous_types)
+    
+    def create_info_item(self, parent, row, col, label_text, value_text, tooltip="", span=1, is_highlight=False):
+        """Create a labeled field with tooltip in a grid layout"""
+        # Create a frame for the field
+        field_frame = ttk.Frame(parent)
+        field_frame.grid(row=row, column=col, padx=5, pady=2, sticky="w", columnspan=span)
+        
+        # Create the label
+        label_widget = ttk.Label(field_frame, text=f"{label_text}", font=("Arial", 10, "bold"))
+        label_widget.pack(side=tk.LEFT, padx=2)
+        
+        # Create the value
+        style = "Bold.TLabel" if is_highlight else "TLabel"
+        text_color = "red" if is_highlight else "white"
+        value_widget = ttk.Label(field_frame, text=str(value_text), foreground=text_color)
+        value_widget.pack(side=tk.LEFT, padx=2)
+        
+        # Add tooltip if provided
+        if tooltip:
+            self.add_tooltip(field_frame, tooltip)
+        
+        return field_frame
+    
+    def add_tooltip(self, widget, text):
+        """Add a tooltip to a widget (shows on hover)"""
+        # This is a simplified tooltip implementation
+        # For a production app, you might want a more sophisticated tooltip
+        def enter(event):
+            x, y, _, _ = widget.bbox("insert")
+            x += widget.winfo_rootx() + 25
+            y += widget.winfo_rooty() + 25
+            
+            # Create a toplevel window
+            self.tooltip = tk.Toplevel(widget)
+            self.tooltip.wm_overrideredirect(True)
+            self.tooltip.wm_geometry(f"+{x}+{y}")
+            
+            label = ttk.Label(self.tooltip, text=text, justify='left',
+                            background="#2a2a3a", foreground="white", 
+                            relief='solid', borderwidth=1,
+                            wraplength=300)
+            label.pack(ipadx=2, ipady=2)
+            
+        def leave(event):
+            if hasattr(self, 'tooltip'):
+                self.tooltip.destroy()
+        
+        widget.bind("<Enter>", enter)
+        widget.bind("<Leave>", leave)
+    
+    def add_section_header(self, text):
+        """Add a section header to the panel"""
+        header = ttk.Label(self.scrollable_frame, text=text, font=("Arial", 12, "bold"))
+        header.pack(fill=tk.X, padx=5, pady=5)
+    
+    def add_separator(self):
+        """Add a separator line"""
+        separator = ttk.Separator(self.scrollable_frame, orient="horizontal")
+        separator.pack(fill=tk.X, padx=5, pady=10)
+    
+    def format_date(self, date_str):
+        """Format a date string"""
+        if not date_str or date_str == 'Unknown':
+            return 'Unknown'
+            
+        try:
+            date = datetime.strptime(date_str, "%Y-%m-%dT%H:%M:%S.%fZ")
+            return date.strftime("%Y-%m-%d")
+        except:
+            try:
+                # Try alternate format
+                date = datetime.strptime(date_str, "%Y-%m-%d")
+                return date.strftime("%Y-%m-%d")
+            except:
+                return date_str
+
+
+"""
+Enhanced System Detail Component
+Displays detailed information about selected star systems with improved context from the Takamo rulebook
+"""
+import tkinter as tk
+from tkinter import ttk
+from datetime import datetime
+
+class EnhancedSystemDetail:
+    """Detail panel for star systems with improved context and explanations"""
+    
+    def __init__(self, parent, app):
+        self.parent = parent
+        self.app = app
+        self.frame = ttk.Frame(parent)
+        
+        # Header section
+        self.header = ttk.Frame(self.frame)
+        self.header.pack(fill=tk.X, padx=10, pady=5)
+        
+        self.title_var = tk.StringVar()
+        self.title_label = ttk.Label(self.header, textvariable=self.title_var, font=("Arial", 14, "bold"))
+        self.title_label.pack(side=tk.LEFT)
+        
+        self.close_btn = ttk.Button(self.header, text="×", width=3, command=self.on_close)
+        self.close_btn.pack(side=tk.RIGHT)
+        
+        # Create a canvas with scrollbar for the detail content
+        self.content_frame = ttk.Frame(self.frame)
+        self.content_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        
+        self.scrollbar = ttk.Scrollbar(self.content_frame)
+        self.scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        self.canvas = tk.Canvas(self.content_frame, bg="#1e1e2e", highlightthickness=0)
+        self.scrollable_frame = ttk.Frame(self.canvas)
+        
+        self.scrollable_frame.bind(
+            "<Configure>",
+            lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+        )
+        
+        self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        self.canvas.configure(yscrollcommand=self.scrollbar.set)
+        self.scrollbar.configure(command=self.canvas.yview)
+        
+        self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
+        # Add mouse wheel scrolling to the canvas
+        # For Windows/MacOS
+        self.canvas.bind("<MouseWheel>", self.on_mousewheel)
+        # For Linux (X11)
+        self.canvas.bind("<Button-4>", self.on_mousewheel_linux_up)
+        self.canvas.bind("<Button-5>", self.on_mousewheel_linux_down)
+        
+        # Add key bindings for scrolling with arrow keys
+        self.canvas.bind("<Up>", lambda e: self.canvas.yview_scroll(-1, "units"))
+        self.canvas.bind("<Down>", lambda e: self.canvas.yview_scroll(1, "units"))
+        
+        # Make canvas focusable to receive key events
+        self.canvas.config(takefocus=1)
+        
+        # Footer section
+        self.footer = ttk.Frame(self.frame)
+        self.footer.pack(fill=tk.X, side=tk.BOTTOM, padx=10, pady=5)
+        
+        self.date_var = tk.StringVar()
+        self.date_label = ttk.Label(self.footer, textvariable=self.date_var, font=("Arial", 8))
+        self.date_label.pack(side=tk.LEFT)
+    
+    def on_mousewheel(self, event):
+        """Handle mouse wheel for Windows/MacOS"""
+        self.canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+    
+    def on_mousewheel_linux_up(self, event):
+        """Handle mouse wheel up for Linux"""
+        self.canvas.yview_scroll(-1, "units")
+    
+    def on_mousewheel_linux_down(self, event):
+        """Handle mouse wheel down for Linux"""
+        self.canvas.yview_scroll(1, "units")
+    
+    def show(self, system_id):
+        """Show the detail panel for the specified system"""
+        # Clear existing content
+        for widget in self.scrollable_frame.winfo_children():
+            widget.destroy()
+        
+        # Hide any other detail panels
+        self.hide_all_panels()
+        
+        # Load and display system data
+        self.load_entity(system_id)
+        
+        # Show this panel
+        self.frame.pack(fill=tk.BOTH, expand=True)
+    
+    def hide(self):
+        """Hide this detail panel"""
+        self.frame.pack_forget()
+    
+    def hide_all_panels(self):
+        """Hide all detail panels"""
+        for widget in self.parent.winfo_children():
+            if isinstance(widget, ttk.Frame):
+                widget.pack_forget()
+    
+    def on_close(self):
+        """Handle close button click"""
+        self.hide()
+        self.app.clear_selection()
+    
+    def load_entity(self, system_id):
+        """Load and display system data with enhanced context"""
+        system_details = self.app.data_loader.get_system_details(system_id)
+        if not system_details:
+            self.title_var.set("System Not Found")
+            return
+        
+        # Set title and date
+        system_code = system_details.get('location', 'Unknown System')
+        star_type = system_details.get('type', 'Unknown Star Type')
+        self.title_var.set(f"System {system_code} - {star_type}")
+        self.date_var.set(f"Last updated: {self.format_date(system_details.get('date', 'Unknown'))}")
+        
+        # Create a summary section at the top
+        self.add_section_header("System Overview")
+        
+        # Basic system information
+        info_frame = ttk.Frame(self.scrollable_frame)
+        info_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        # System code and position information
+        code = system_details.get('location', 'Unknown')
+        
+        # Parse system code 
+        # Format should be AAA1111 - where AAA is sector code, 111 is subsector code, and 1 is system number
+        sector_code = ""
+        subsector_code = ""
+        system_num = ""
+        
+        if code and len(code) >= 7:
+            sector_code = code[:3]
+            subsector_code = code[3:6]
+            system_num = code[6]
+            
+            subsector_full = sector_code + subsector_code
+        
+        code_tooltip = "A star system's code consists of the three-letter sector code, followed by three-digit subsector code, followed by system position (1-5)."
+        code_label = self.create_info_item(info_frame, 0, 0, "System Code:", code, tooltip=code_tooltip, span=2)
+        
+        # Star type information
+        star_type = system_details.get('type', 'Unknown')
+        star_info = self.get_star_info(star_type)
+        
+        is_hazard = self.is_navigation_hazard(star_type)
+        type_tooltip = star_info if star_info else "The classification of the star in this system."
+        type_label = self.create_info_item(info_frame, 1, 0, "Star Type:", star_type, 
+                                          tooltip=type_tooltip, span=2, is_highlight=is_hazard)
+        
+        # If it's a navigation hazard, add a warning
+        if is_hazard:
+            warning_label = ttk.Label(info_frame, text="⚠️ DANGER: This star will destroy any fleet that enters!", 
+                                     foreground="red", font=("Arial", 10, "bold"))
+            warning_label.grid(row=2, column=0, padx=5, pady=2, sticky="w", columnspan=2)
+        
+        # Add information about parent subsector
+        if subsector_code:
+            subsector_btn = ttk.Button(
+                info_frame,
+                text=f"Parent Subsector: {subsector_full}",
+                command=lambda: self.app.select_entity('subsector', 
+                                                      self.app.data_loader.get_subsector_id_by_code(subsector_full))
+            )
+            subsector_btn.grid(row=3, column=0, padx=5, pady=2, sticky="w", columnspan=2)
+        
+        # Position in subsector
+        if system_num:
+            position_tooltip = "Star systems in a subsector are numbered 1 through 5, with 1 being the first position."
+            position_label = self.create_info_item(info_frame, 4, 0, "Position in Subsector:", 
+                                                 f"{system_num} of 5", tooltip=position_tooltip, span=2)
+        
+        # Number of planets
+        planets = system_details.get('planets', [])
+        planet_count = len(planets)
+        
+        planet_tooltip = "A star system can have up to 9 planets, numbered outward from the star."
+        planet_label = self.create_info_item(info_frame, 5, 0, "Planets:", 
+                                           f"{planet_count}/9", tooltip=planet_tooltip, span=2)
+        
+        # Add separator
+        self.add_separator()
+        
+        # Planetary system visualization
+        self.add_section_header("Planetary System")
+        
+        # Planetary system explanation
+        planet_info = ttk.Label(self.scrollable_frame, 
+                              text="Planets are numbered 1 through 9, from closest to farthest from the star. Each orbit may be empty due to natural absence or Nomad Platform movement.",
+                              wraplength=550, justify="left")
+        planet_info.pack(fill=tk.X, padx=10, pady=5)
+        
+        # Create a frame for the planets
+        planets_frame = ttk.Frame(self.scrollable_frame)
+        planets_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        if planets:
+            # Create a table-like structure
+            headers = ["Orbit", "Type", "Size", "Status", "Owner", "Notes"]
+            
+            # Create header
+            header_frame = ttk.Frame(planets_frame)
+            header_frame.pack(fill=tk.X, padx=5, pady=2)
+            
+            for i, header in enumerate(headers):
+                header_label = ttk.Label(header_frame, text=header, font=("Arial", 10, "bold"))
+                header_label.grid(row=0, column=i, padx=5, pady=2, sticky="w")
+            
+            ttk.Separator(planets_frame, orient="horizontal").pack(fill=tk.X, padx=5, pady=5)
+            
+            # Sort planets by orbit (the last digit of their location code)
+            sorted_planets = sorted(planets, key=lambda p: int(p.get('location', '0')[-1]) if p.get('location', '0')[-1].isdigit() else 9)
+            
+            # Create rows for each planet
+            for i, planet in enumerate(sorted_planets):
+                planet_frame = ttk.Frame(planets_frame)
+                planet_frame.pack(fill=tk.X, padx=5, pady=2)
+                
+                # Orbit
+                planet_code = planet.get('location', '')
+                orbit_num = planet_code[-1] if planet_code and len(planet_code) > 0 else '?'
+                
+                planet_button = ttk.Button(
+                    planet_frame,
+                    text=orbit_num,
+                    command=lambda p=planet.get('id'): self.app.select_planet(p)
+                )
+                planet_button.grid(row=0, column=0, padx=5, pady=2, sticky="w")
+                
+                # Planet Type (gas giant, terrestrial, etc)
+                planet_type = self.get_planet_type(planet)
+                type_label = ttk.Label(planet_frame, text=planet_type if planet_type else "Unknown")
+                type_label.grid(row=0, column=1, padx=5, pady=2, sticky="w")
+                
+                # Size
+                size = planet.get('size', '?')
+                size_label = ttk.Label(planet_frame, text=size)
+                size_label.grid(row=0, column=2, padx=5, pady=2, sticky="w")
+                
+                # Status
+                status = planet.get('status', 'Unknown')
+                status_label = ttk.Label(planet_frame, text=status)
+                status_label.grid(row=0, column=3, padx=5, pady=2, sticky="w")
+                
+                # Owner
+                owner = planet.get('owner', '')
+                is_wyvern = False
+                if owner and "WYVERN SUPREMACY" in owner.upper():
+                    is_wyvern = True
+                    owner_display = owner + " 🟢"
+                else:
+                    owner_display = owner if owner else "Unowned"
+                
+                owner_label = ttk.Label(planet_frame, text=owner_display,
+                                       foreground="#00ff00" if is_wyvern else "white")
+                owner_label.grid(row=0, column=4, padx=5, pady=2, sticky="w")
+                
+                # Notes (extras, special features)
+                notes = []
+                
+                if "HOMEWORLD" in status.upper():
+                    notes.append("Home World")
+                
+                if planet.get('extras'):
+                    notes.append(planet.get('extras'))
+                
+                notes_text = "; ".join(notes) if notes else ""
+                notes_label = ttk.Label(planet_frame, text=notes_text)
+                notes_label.grid(row=0, column=5, padx=5, pady=2, sticky="w")
+                
+                # Add a hover tooltip with full planet details
+                self.add_planet_tooltip(planet_frame, planet)
+        else:
+            no_planets = ttk.Label(planets_frame, text="No planets found in this star system.")
+            no_planets.pack(fill=tk.X, padx=10, pady=10)
+        
+        # Add separator
+        self.add_separator()
+        
+        # Add orbit information explanation
+        self.add_section_header("Orbit Information")
+        
+        orbit_info_frame = ttk.Frame(self.scrollable_frame)
+        orbit_info_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        orbit_text = (
+            "In Takamo, planets are arranged by orbit number (1-9) from closest to farthest from the star. "
+            "Some orbits may be empty due to natural formation or Nomad Platform movement.\n\n"
+            "Special planet types:\n"
+            "• Gas Giants: Typically very large (size 10)\n"
+            "• Asteroid Belts: Very small (size 0-1)\n"
+            "• Terrestrial Planets: Habitable worlds (sizes 1-9)\n\n"
+            "All planets may be colonized and used as military bases, regardless of their type."
+        )
+        
+        orbit_label = ttk.Label(orbit_info_frame, text=orbit_text, wraplength=550, justify="left")
+        orbit_label.pack(fill=tk.X, padx=5, pady=5)
+        
+        # Add separator
+        self.add_separator()
+        
+        # Add navigation section
+        self.add_section_header("Navigation")
+        
+        nav_frame = ttk.Frame(self.scrollable_frame)
+        nav_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        # Add parent subsector button
+        if subsector_full:
+            subsector_button = ttk.Button(
+                nav_frame,
+                text=f"Back to Subsector {subsector_full}",
+                command=lambda: self.app.select_entity('subsector', 
+                                                     self.app.data_loader.get_subsector_id_by_code(subsector_full))
+            )
+            subsector_button.pack(fill=tk.X, padx=5, pady=2)
+        
+        # Add parent sector button
+        if sector_code:
+            sector_button = ttk.Button(
+                nav_frame,
+                text=f"Back to Sector {sector_code}",
+                command=lambda: self.app.select_entity('sector', 
+                                                    self.app.data_loader.get_sector_id_by_code(sector_code))
+            )
+            sector_button.pack(fill=tk.X, padx=5, pady=2)
+        
+        # Add navigation to other star systems in the subsector
+        if subsector_full and system_num:
+            other_systems_frame = ttk.Frame(nav_frame)
+            other_systems_frame.pack(fill=tk.X, padx=5, pady=10)
+            
+            other_systems_label = ttk.Label(other_systems_frame, text="Other systems in this subsector:", font=("Arial", 10, "bold"))
+            other_systems_label.pack(fill=tk.X, anchor="w", padx=5, pady=2)
+            
+            # Create buttons for systems 1-5, highlighting the current one
+            system_buttons_frame = ttk.Frame(other_systems_frame)
+            system_buttons_frame.pack(fill=tk.X, padx=5, pady=5)
+            
+            for i in range(1, 6):
+                if str(i) == system_num:
+                    # Current system - just show a label
+                    sys_label = ttk.Label(system_buttons_frame, text=f"System {i}", background="#3a3a4a", width=10)
+                    sys_label.pack(side=tk.LEFT, padx=2, pady=2)
+                else:
+                    # Create a button for other systems
+                    other_sys_code = f"{subsector_full}{i}"
+                    sys_btn = ttk.Button(
+                        system_buttons_frame,
+                        text=f"System {i}",
+                        width=10,
+                        command=lambda c=other_sys_code: self.app.select_entity(
+                            'system', 
+                            self.app.data_loader.get_system_id_by_code(c)
+                        )
+                    )
+                    sys_btn.pack(side=tk.LEFT, padx=2, pady=2)
+        
+    def get_star_info(self, star_type):
+        """Return information about a star type/class"""
+        star_info = {
+            "Blue - Type W": "One of the hottest and most massive star types.",
+            "Blue - Type O": "Very hot, massive, and luminous star.",
+            "Blue - Type B": "Hot, blue star, typically found in young clusters.",
+            "Blue/White - Type A": "White or blue-white stars.",
+            "White - Type F": "White stars slightly hotter than our Sun.",
+            "Yellow - Type G": "Yellow stars similar to our Sun.",
+            "Orange/Red - Type K": "Orange to red stars, cooler than our Sun.",
+            "Red - Type M": "Red dwarf stars, the most common type.",
+            "Red - Type C": "Carbon-rich red giant stars.",
+            "Red - Type S": "Cool giant stars with unusual spectra.",
+            "Bright Supergiant": "Extremely luminous evolved massive star.",
+            "Faint Supergiant": "A less luminous supergiant star.",
+            "Bright Giant": "Very luminous giant star.",
+            "Normal Giant": "Standard giant star, an evolved star with expanded outer layers.",
+            "Subgiant": "Star intermediate between a main sequence star and a giant star.",
+            "Main Sequence": "A 'normal' star like our Sun, fusing hydrogen in its core.",
+            "Subdwarf": "Stars with luminosity 1.5 to 2 magnitudes lower than main sequence stars.",
+            "Binary": "A system of two stars orbiting around their common center of mass.",
+            "Multiple": "A system of three or more stars orbiting around their common center of mass.",
+            "White Dwarf Secondary": "A system containing a white dwarf, the dense remnant of a dead star.",
+            "Blackhole Secondary": "A system containing a black hole, extremely hazardous to navigation."
+        }
+        
+        for key, info in star_info.items():
+            if key in star_type:
+                return info
+        
+        return None
+    
+    def is_navigation_hazard(self, star_type):
+        """Check if a star type is a navigation hazard"""
+        hazardous_types = [
+            "Blackhole",
+            "Neutron Star",
+            "Nova",
+            "White Dwarf",
+            "Black Dwarf"
+        ]
+        
+        return any(hazard in star_type for hazard in hazardous_types)
+    
+    def get_planet_type(self, planet):
+        """Determine the planet type based on attributes"""
+        # First check for specific tags in the extras
+        extras = planet.get('extras', '').lower()
+        if 'gas giant' in extras:
+            return "Gas Giant"
+        if 'asteroid' in extras:
+            return "Asteroid Belt"
+        
+        # Check size - gas giants are typically size 10
+        size = planet.get('size')
+        if size == '10':
+            return "Gas Giant" 
+        if size == '0':
+            return "Asteroid Belt"
+        
+        # Otherwise it's a terrestrial planet
+        return "Terrestrial"
+    
+    def add_planet_tooltip(self, widget, planet):
+        """Add a detailed tooltip for a planet"""
+        # Create tooltip content
+        tooltip_text = f"Planet: {planet.get('location', 'Unknown')}\n"
+        tooltip_text += f"Size: {planet.get('size', '?')}\n"
+        tooltip_text += f"Status: {planet.get('status', 'Unknown')}\n"
+        
+        # Add atmosphere and hydrographics if available
+        if planet.get('atmos'):
+            tooltip_text += f"Atmosphere: {planet.get('atmos')}\n"
+        if planet.get('hyp'):
+            tooltip_text += f"Hydrographics: {planet.get('hyp')}\n"
+        
+        # Add owner if available
+        if planet.get('owner'):
+            tooltip_text += f"Owner: {planet.get('owner')}\n"
+        
+        # Add mining potential if available
+        if planet.get('mpot'):
+            tooltip_text += f"Mining Potential: {planet.get('mpot')}\n"
+        
+        # Add tech level if available
+        if planet.get('tl') or planet.get('ptl'):
+            tl = planet.get('tl', planet.get('ptl', '?'))
+            tooltip_text += f"Tech Level: {tl}\n"
+        
+        # Add extra information
+        if planet.get('extras'):
+            tooltip_text += f"Notes: {planet.get('extras')}"
+        
+        self.add_tooltip(widget, tooltip_text)
+    
+    def create_info_item(self, parent, row, col, label_text, value_text, tooltip="", span=1, is_highlight=False):
+        """Create a labeled field with tooltip in a grid layout"""
+        # Create a frame for the field
+        field_frame = ttk.Frame(parent)
+        field_frame.grid(row=row, column=col, padx=5, pady=2, sticky="w", columnspan=span)
+        
+        # Create the label
+        label_widget = ttk.Label(field_frame, text=f"{label_text}", font=("Arial", 10, "bold"))
+        label_widget.pack(side=tk.LEFT, padx=2)
+        
+        # Create the value
+        style = "Bold.TLabel" if is_highlight else "TLabel"
+        text_color = "red" if is_highlight else "white"
+        value_widget = ttk.Label(field_frame, text=str(value_text), foreground=text_color)
+        value_widget.pack(side=tk.LEFT, padx=2)
+        
+        # Add tooltip if provided
+        if tooltip:
+            self.add_tooltip(field_frame, tooltip)
+        
+        return field_frame
+    
+    def add_tooltip(self, widget, text):
+        """Add a tooltip to a widget (shows on hover)"""
+        # This is a simplified tooltip implementation
+        # For a production app, you might want a more sophisticated tooltip
+        def enter(event):
+            x, y, _, _ = widget.bbox("insert")
+            x += widget.winfo_rootx() + 25
+            y += widget.winfo_rooty() + 25
+            
+            # Create a toplevel window
+            self.tooltip = tk.Toplevel(widget)
+            self.tooltip.wm_overrideredirect(True)
+            self.tooltip.wm_geometry(f"+{x}+{y}")
+            
+            label = ttk.Label(self.tooltip, text=text, justify='left',
+                            background="#2a2a3a", foreground="white", 
+                            relief='solid', borderwidth=1,
+                            wraplength=300)
+            label.pack(ipadx=2, ipady=2)
+            
+        def leave(event):
+            if hasattr(self, 'tooltip'):
+                self.tooltip.destroy()
+        
+        widget.bind("<Enter>", enter)
+        widget.bind("<Leave>", leave)
+    
+    def add_section_header(self, text):
+        """Add a section header to the panel"""
+        header = ttk.Label(self.scrollable_frame, text=text, font=("Arial", 12, "bold"))
+        header.pack(fill=tk.X, padx=5, pady=5)
+    
+    def add_separator(self):
+        """Add a separator line"""
+        separator = ttk.Separator(self.scrollable_frame, orient="horizontal")
+        separator.pack(fill=tk.X, padx=5, pady=10)
+    
+    def format_date(self, date_str):
+        """Format a date string"""
+        if not date_str or date_str == 'Unknown':
+            return 'Unknown'
+            
+        try:
+            date = datetime.strptime(date_str, "%Y-%m-%dT%H:%M:%S.%fZ")
+            return date.strftime("%Y-%m-%d")
+        except:
+            try:
+                # Try alternate format
+                date = datetime.strptime(date_str, "%Y-%m-%d")
+                return date.strftime("%Y-%m-%d")
+            except:
+                return date_str
+
+
+class EnhancedPlanetDetail:
+    """Detail panel for planets with improved context and explanations"""
+    
+    def __init__(self, parent, app):
+        self.parent = parent
+        self.app = app
+        self.frame = ttk.Frame(parent)
+        
+        # Header section
+        self.header = ttk.Frame(self.frame)
+        self.header.pack(fill=tk.X, padx=10, pady=5)
+        
+        self.title_var = tk.StringVar()
+        self.title_label = ttk.Label(self.header, textvariable=self.title_var, font=("Arial", 14, "bold"))
+        self.title_label.pack(side=tk.LEFT)
+        
+        self.close_btn = ttk.Button(self.header, text="×", width=3, command=self.on_close)
+        self.close_btn.pack(side=tk.RIGHT)
+        
+        # Create a canvas with scrollbar for the detail content
+        self.content_frame = ttk.Frame(self.frame)
+        self.content_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        
+        self.scrollbar = ttk.Scrollbar(self.content_frame)
+        self.scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        self.canvas = tk.Canvas(self.content_frame, bg="#1e1e2e", highlightthickness=0)
+        self.scrollable_frame = ttk.Frame(self.canvas)
+        
+        self.scrollable_frame.bind(
+            "<Configure>",
+            lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+        )
+        
+        self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        self.canvas.configure(yscrollcommand=self.scrollbar.set)
+        self.scrollbar.configure(command=self.canvas.yview)
+        
+        self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
+        # Add mouse wheel scrolling to the canvas
+        # For Windows/MacOS
+        self.canvas.bind("<MouseWheel>", self.on_mousewheel)
+        # For Linux (X11)
+        self.canvas.bind("<Button-4>", self.on_mousewheel_linux_up)
+        self.canvas.bind("<Button-5>", self.on_mousewheel_linux_down)
+        
+        # Add key bindings for scrolling with arrow keys
+        self.canvas.bind("<Up>", lambda e: self.canvas.yview_scroll(-1, "units"))
+        self.canvas.bind("<Down>", lambda e: self.canvas.yview_scroll(1, "units"))
+        
+        # Make canvas focusable to receive key events
+        self.canvas.config(takefocus=1)
+        
+        # Footer section
+        self.footer = ttk.Frame(self.frame)
+        self.footer.pack(fill=tk.X, side=tk.BOTTOM, padx=10, pady=5)
+        
+        self.date_var = tk.StringVar()
+        self.date_label = ttk.Label(self.footer, textvariable=self.date_var, font=("Arial", 8))
+        self.date_label.pack(side=tk.LEFT)
+    
+    def on_mousewheel(self, event):
+        """Handle mouse wheel for Windows/MacOS"""
+        self.canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+    
+    def on_mousewheel_linux_up(self, event):
+        """Handle mouse wheel up for Linux"""
+        self.canvas.yview_scroll(-1, "units")
+    
+    def on_mousewheel_linux_down(self, event):
+        """Handle mouse wheel down for Linux"""
+        self.canvas.yview_scroll(1, "units")
+    
+    def show(self, planet_id):
+        """Show the detail panel for the specified planet"""
+        # Clear existing content
+        for widget in self.scrollable_frame.winfo_children():
+            widget.destroy()
+        
+        # Hide any other detail panels
+        self.hide_all_panels()
+        
+        # Load and display planet data
+        self.load_entity(planet_id)
+        
+        # Show this panel
+        self.frame.pack(fill=tk.BOTH, expand=True)
+    
+    def hide(self):
+        """Hide this detail panel"""
+        self.frame.pack_forget()
+    
+    def hide_all_panels(self):
+        """Hide all detail panels"""
+        for widget in self.parent.winfo_children():
+            if isinstance(widget, ttk.Frame):
+                widget.pack_forget()
+    
+    def on_close(self):
+        """Handle close button click"""
+        self.hide()
+        self.app.clear_selection()
+    
+    def load_entity(self, planet_id):
+        """Load and display planet data with enhanced context"""
+        planet_details = self.app.data_loader.get_planet_details(planet_id)
+        if not planet_details:
+            self.title_var.set("Planet Not Found")
+            return
+        
+        # Set title and date
+        title = planet_details.get('location', 'Unknown Planet')
+        if planet_details.get('size'):
+            title += f" (Size: {planet_details['size']})"
+        self.title_var.set(title)
+        self.date_var.set(f"Last updated: {self.format_date(planet_details.get('date', 'Unknown'))}")
+        
+        # Create a summary section at the top
+        self.add_section_header("Planet Overview")
+        
+        # Create grid layout for overview section
+        overview_frame = ttk.Frame(self.scrollable_frame)
+        overview_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        # Location code
+        location = planet_details.get('location', 'Unknown')
+        location_label = self.create_info_item(overview_frame, 0, 0, "Location:", location, 
+                                              tooltip="Unique coordinates that identify this planet's position in the galaxy")
+        
+        # Planet status
+        status_text = planet_details.get('status', 'Unknown')
+        status_info = "A planet's status determines what can be built on it and how it can be used"
+        status_label = self.create_info_item(overview_frame, 0, 1, "Status:", status_text, tooltip=status_info)
+        
+        # Planet size
+        size_text = planet_details.get('size', 'Unknown')
+        size_info = "Planet size determines maximum population and military capacity (1-9 scale)"
+        if size_text:
+            size_text = f"{size_text} (Max Pop: {int(size_text) * 13}, Max Forts: {int(size_text) * 5})"
+        size_label = self.create_info_item(overview_frame, 1, 0, "Size:", size_text, tooltip=size_info)
+        
+        # Atmosphere and hydrosphere details - with interpretation
+        atmos_val = planet_details.get('atmos')
+        atmos_info = "Atmospheric value affects habitat range and population transfers (1-9 scale)"
+        atmos_text = f"{atmos_val if atmos_val else 'Unknown'}"
+        atmos_label = self.create_info_item(overview_frame, 1, 1, "Atmosphere:", atmos_text, tooltip=atmos_info)
+        
+        hyp_val = planet_details.get('hyp')
+        hyp_info = "Hydrographic value affects habitat range and population transfers (1-9 scale)"
+        hyp_text = f"{hyp_val if hyp_val else 'Unknown'}"
+        hyp_label = self.create_info_item(overview_frame, 2, 0, "Hydrographics:", hyp_text, tooltip=hyp_info)
+        
+        # Owner
+        is_wyvern = False
+        owner_text = planet_details.get('owner', 'Unknown')
+        if owner_text and "WYVERN SUPREMACY" in owner_text.upper():
+            is_wyvern = True
+            owner_text += " 🟢"
+        owner_label = self.create_info_item(overview_frame, 2, 1, "Owner:", owner_text, 
+                                           tooltip="The player who controls this planet", is_highlight=is_wyvern)
+        
+        # Tech Level
+        tec_level = "Unknown"
+        if planet_details.get('ptl'):
+            tec_level = planet_details['ptl']
+        elif planet_details.get('tl'):
+            tec_level = planet_details['tl']
+        
+        tec_info = "Determines the strength of military units and what can be built here"
+        tec_label = self.create_info_item(overview_frame, 3, 0, "Tech Level:", tec_level, tooltip=tec_info)
+        
+        # Mining potential and actual
+        mpot = planet_details.get('mpot', 'Unknown')
+        mpot_info = "Maximum number of Mining Centers (MCs) that can be built"
+        mpot_label = self.create_info_item(overview_frame, 3, 1, "Mining Potential:", mpot, tooltip=mpot_info)
+        
+        # Add separator
+        self.add_separator()
+        
+        # Economic Information Section
+        self.add_section_header("Economy & Infrastructure")
+        econ_frame = ttk.Frame(self.scrollable_frame)
+        econ_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        # Mining Centers
+        mc_count = planet_details.get('mprod', 0)
+        mc_info = "Each MC provides 20 RUs per turn and allows building 5 PCs"
+        mc_label = self.create_info_item(econ_frame, 0, 0, "Mining Centers:", mc_count, tooltip=mc_info)
+        
+        # Production Centers
+        pc_count = planet_details.get('pcenter', 0)
+        pc_info = "Each PC provides 20 RUs per turn"
+        pc_label = self.create_info_item(econ_frame, 0, 1, "Production Centers:", pc_count, tooltip=pc_info)
+        
+        # Shipyards
+        sy_count = planet_details.get('sy', 0)
+        sy_max = ((int(planet_details.get('size', 0)) + 1) // 2) if planet_details.get('size') else "?"
+        sy_info = f"Used to build and repair ships (Max: {sy_max})"
+        sy_label = self.create_info_item(econ_frame, 1, 0, "Shipyards:", sy_count, tooltip=sy_info)
+        
+        # Population
+        pop_count = planet_details.get('pop', 0)
+        pop_max = int(planet_details.get('size', 0)) * 13 if planet_details.get('size') else "?"
+        pop_info = f"Used for recruiting MUs and taxation (Max: {pop_max})"
+        pop_label = self.create_info_item(econ_frame, 1, 1, "Population:", pop_count, tooltip=pop_info)
+        
+        # Special Centers
+        has_tc = False  # Trade Center
+        has_ac = False  # Agricultural Center
+        has_sc = False  # Smuggling Center
+        
+        # Add special centers status (check if this data is available)
+        special_centers = []
+        if planet_details.get('tc'):
+            special_centers.append("Trade Center (TC)")
+            has_tc = True
+        if planet_details.get('ac'):
+            special_centers.append("Agricultural Center (AC)")
+            has_ac = True
+        if planet_details.get('sc'):
+            special_centers.append("Smuggling Center (SC)")
+            has_sc = True
+        
+        special_centers_text = ", ".join(special_centers) if special_centers else "None"
+        special_info = "Special centers provide additional benefits based on player type"
+        special_label = self.create_info_item(econ_frame, 2, 0, "Special Centers:", special_centers_text, 
+                                             tooltip=special_info, span=2)
+        
+        # Add separator
+        self.add_separator()
+        
+        # Military Information Section
+        self.add_section_header("Military Forces & Defenses")
+        mil_frame = ttk.Frame(self.scrollable_frame)
+        mil_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        # MUs
+        mu_count = planet_details.get('mu', 0)
+        mu_max = int(planet_details.get('size', 0)) * 100 if planet_details.get('size') else "?"
+        mu_info = f"Basic ground forces for defense and invasion (Max: {mu_max})"
+        mu_label = self.create_info_item(mil_frame, 0, 0, "Marine Units:", mu_count, tooltip=mu_info)
+        
+        # HMUs
+        hmu_count = planet_details.get('hmu', 0)
+        hmu_max = int(planet_details.get('size', 0)) * 100 if planet_details.get('size') else "?"
+        hmu_info = f"Heavy ground forces with 2x combat power (Max: {hmu_max})"
+        hmu_label = self.create_info_item(mil_frame, 0, 1, "Heavy Marines:", hmu_count, tooltip=hmu_info)
+        
+        # Forts
+        fort_count = planet_details.get('fort', 0)
+        fort_max = int(planet_details.get('size', 0)) * 5 if planet_details.get('size') else "?"
+        fort_info = f"Orbital defense installations (Max: {fort_max})"
+        fort_label = self.create_info_item(mil_frame, 1, 0, "Forts:", fort_count, tooltip=fort_info)
+        
+        # Fighters
+        ftr_count = planet_details.get('fighter', 0)
+        ftr_max = int(planet_details.get('size', 0)) * 25 if planet_details.get('size') else "?"
+        ftr_info = f"Planetary defense fighters (Max: {ftr_max})"
+        ftr_label = self.create_info_item(mil_frame, 1, 1, "Fighters:", ftr_count, tooltip=ftr_info)
+        
+        # Torpedoes
+        torp_count = planet_details.get('torp', 0)
+        torp_class = planet_details.get('torpclass', 'None')
+        torp_max = fort_count * 20 if fort_count else 0
+        torp_info = f"Long-range missiles housed in Forts (Max: {torp_max})"
+        torp_text = f"{torp_count} (Class {torp_class})" if torp_count else "None"
+        torp_label = self.create_info_item(mil_frame, 2, 0, "Torpedoes:", torp_text, tooltip=torp_info)
+
+        # ABMs (Anti-Ballistic Missiles)
+        abm_count = planet_details.get('abm', 0)
+        abm_max = int(planet_details.get('size', 0)) * 25 if planet_details.get('size') else "?"
+        abm_info = f"Defense against enemy missiles (Max: {abm_max})"
+        abm_label = self.create_info_item(mil_frame, 2, 1, "ABMs:", abm_count, tooltip=abm_info)
+        
+        # Guerrillas (if any)
+        gu_count = planet_details.get('gu', 0)
+        if gu_count:
+            gu_info = "Rebel forces that can attack planetary installations"
+            gu_label = self.create_info_item(mil_frame, 3, 0, "Guerrillas:", gu_count, tooltip=gu_info, span=2)
+        
+        # Add aggression level
+        agg_level = planet_details.get('agg', 'Unknown')
+        agg_info = "Determines how likely the planet is to engage in combat (10-100 scale)"
+        agg_label = self.create_info_item(mil_frame, 4, 0, "Aggression Level:", agg_level, tooltip=agg_info, span=2)
+        
+        # Add Notes Section if present
+        if planet_details.get('notes'):
+            self.add_separator()
+            self.add_section_header("Planet Notes")
+            notes_frame = ttk.Frame(self.scrollable_frame)
+            notes_frame.pack(fill=tk.X, padx=5, pady=5)
+            
+            notes_text = planet_details.get('notes', '')
+            notes_label = ttk.Label(notes_frame, text=notes_text, wraplength=550, justify="left")
+            notes_label.pack(fill=tk.X, padx=5, pady=5)
+        
+        # Parent system and navigation section
+        self.add_separator()
+        self.add_section_header("Navigation")
+        
+        # Parent system
+        system = planet_details.get('system')
+        if system:
+            nav_frame = ttk.Frame(self.scrollable_frame)
+            nav_frame.pack(fill=tk.X, padx=5, pady=5)
+            
+            system_text = f"{system.get('location', 'Unknown')} - {system.get('nav', 'Unknown')}"
+            nav_button = ttk.Button(
+                nav_frame, 
+                text=f"Parent System: {system_text}",
+                command=lambda s=system.get('id'): self.app.select_system(s)
+            )
+            nav_button.pack(fill=tk.X, padx=5, pady=2)
+    
+    def create_info_item(self, parent, row, col, label_text, value_text, tooltip="", span=1, is_highlight=False):
+        """Create a labeled field with tooltip in a grid layout"""
+        # Create a frame for the field
+        field_frame = ttk.Frame(parent)
+        field_frame.grid(row=row, column=col, padx=5, pady=2, sticky="w", columnspan=span)
+        
+        # Create the label
+        label_widget = ttk.Label(field_frame, text=f"{label_text}", font=("Arial", 10, "bold"))
+        label_widget.pack(side=tk.LEFT, padx=2)
+        
+        # Create the value
+        style = "Bold.TLabel" if is_highlight else "TLabel"
+        value_widget = ttk.Label(field_frame, text=str(value_text), style=style)
+        value_widget.pack(side=tk.LEFT, padx=2)
+        
+        # Add tooltip if provided
+        if tooltip:
+            self.add_tooltip(field_frame, tooltip)
+        
+        return field_frame
+    
+    def add_tooltip(self, widget, text):
+        """Add a tooltip to a widget (shows on hover)"""
+        # This is a simplified tooltip implementation
+        # For a production app, you might want a more sophisticated tooltip
+        def enter(event):
+            x, y, _, _ = widget.bbox("insert")
+            x += widget.winfo_rootx() + 25
+            y += widget.winfo_rooty() + 25
+            
+            # Create a toplevel window
+            self.tooltip = tk.Toplevel(widget)
+            self.tooltip.wm_overrideredirect(True)
+            self.tooltip.wm_geometry(f"+{x}+{y}")
+            
+            label = ttk.Label(self.tooltip, text=text, justify='left',
+                            background="#2a2a3a", foreground="white", 
+                            relief='solid', borderwidth=1,
+                            wraplength=300)
+            label.pack(ipadx=2, ipady=2)
+            
+        def leave(event):
+            if hasattr(self, 'tooltip'):
+                self.tooltip.destroy()
+        
+        widget.bind("<Enter>", enter)
+        widget.bind("<Leave>", leave)
+    
+    def add_section_header(self, text):
+        """Add a section header to the panel"""
+        header = ttk.Label(self.scrollable_frame, text=text, font=("Arial", 12, "bold"))
+        header.pack(fill=tk.X, padx=5, pady=5)
+    
+    def add_separator(self):
+        """Add a separator line"""
+        separator = ttk.Separator(self.scrollable_frame, orient="horizontal")
+        separator.pack(fill=tk.X, padx=5, pady=10)
+    
+    def add_field(self, label, value, is_header=False):
+        """Add a labeled field to the detail panel"""
+        if not value:
+            return  # Skip empty values
+        
+        field_frame = ttk.Frame(self.scrollable_frame)
+        field_frame.pack(fill=tk.X, padx=5, pady=2)
+        
+        label_widget = ttk.Label(field_frame, text=f"{label}:", font=("Arial", 10, "bold" if is_header else "normal"))
+        label_widget.pack(side=tk.LEFT, padx=5)
+        
+        value_widget = ttk.Label(field_frame, text=str(value))
+        value_widget.pack(side=tk.LEFT, padx=5)
+    
+    def format_date(self, date_str):
+        """Format a date string"""
+        if not date_str or date_str == 'Unknown':
+            return 'Unknown'
+            
+        try:
+            date = datetime.strptime(date_str, "%Y-%m-%dT%H:%M:%S.%fZ")
+            return date.strftime("%Y-%m-%d")
+        except:
+            try:
+                # Try alternate format
+                date = datetime.strptime(date_str, "%Y-%m-%d")
+                return date.strftime("%Y-%m-%d")
+            except:
+                return date_str
